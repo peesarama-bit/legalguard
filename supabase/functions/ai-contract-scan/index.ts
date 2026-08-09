@@ -11,9 +11,25 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, serviceKey);
 
-async function getNimConfig(): Promise<{ apiKey: string; model: string; baseUrl: string }> {
+async function getNimConfig(userId?: string): Promise<{ apiKey: string; model: string; baseUrl: string }> {
+  // Try database first (user-configurable)
+  if (userId) {
+    const { data: settings } = await supabase
+      .from("workspace_settings")
+      .select("nim_api_key, nim_model, nim_base_url")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (settings?.nim_api_key) {
+      return {
+        apiKey: settings.nim_api_key,
+        model: settings.nim_model || "nvidia/nemotron-3-nano-30b-a3b",
+        baseUrl: settings.nim_base_url || "https://integrate.api.nvidia.com/v1",
+      };
+    }
+  }
+  // Fall back to env vars
   const apiKey = Deno.env.get("NVIDIA_NIM_API_KEY");
-  if (!apiKey) throw new Error("NVIDIA_NIM_API_KEY not configured");
+  if (!apiKey) throw new Error("NVIDIA NIM API key not configured. Add it in Account settings or as an edge function secret.");
   return {
     apiKey,
     model: Deno.env.get("NVIDIA_NIM_MODEL") || "nvidia/nemotron-3-nano-30b-a3b",
@@ -167,7 +183,7 @@ Deno.serve(async (req: Request) => {
     // Try real LLM analysis, fall back to heuristics
     let analysis: { flags: FlagResult[]; terms: TermResult[]; riskScore: number };
     try {
-      const config = await getNimConfig();
+      const config = await getNimConfig(user_id);
       const llmResult = await llmAnalyzeContract(text, config);
       if (llmResult) {
         analysis = llmResult;

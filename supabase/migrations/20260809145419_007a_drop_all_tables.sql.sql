@@ -1,0 +1,20 @@
+-- Drop existing tables for clean slate
+DROP TABLE IF EXISTS payment_promises CASCADE;
+DROP TABLE IF EXISTS ai_insights CASCADE;
+DROP TABLE IF EXISTS client_communications CASCADE;
+DROP TABLE IF EXISTS clients CASCADE;
+DROP TABLE IF EXISTS email_drafts CASCADE;
+DROP TABLE IF EXISTS webhook_events CASCADE;
+DROP TABLE IF EXISTS activity_log CASCADE;
+DROP TABLE IF EXISTS clause_flags CASCADE;
+DROP TABLE IF EXISTS contract_terms CASCADE;
+DROP TABLE IF EXISTS invoices CASCADE;
+DROP TABLE IF EXISTS contracts CASCADE;
+DROP TABLE IF EXISTS workspace_settings CASCADE;
+DROP TABLE IF EXISTS profiles CASCADE;
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS handle_new_user() CASCADE;
+DROP FUNCTION IF EXISTS seed_demo_data_for_user(uuid) CASCADE;
+DROP FUNCTION IF EXISTS log_activity(text, text, text, jsonb) CASCADE;
+DROP FUNCTION IF EXISTS log_activity(uuid, text, text, text, jsonb) CASCADE;
+DROP FUNCTION IF EXISTS refresh_overdue_invoices() CASCADE;

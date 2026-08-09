@@ -13,9 +13,23 @@ const supabase = createClient(supabaseUrl, serviceKey);
 
 type Tone = "friendly" | "professional" | "firm" | "final";
 
-async function getNimConfig(): Promise<{ apiKey: string; model: string; baseUrl: string }> {
+async function getNimConfig(userId?: string): Promise<{ apiKey: string; model: string; baseUrl: string }> {
+  if (userId) {
+    const { data: settings } = await supabase
+      .from("workspace_settings")
+      .select("nim_api_key, nim_model, nim_base_url")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (settings?.nim_api_key) {
+      return {
+        apiKey: settings.nim_api_key,
+        model: settings.nim_model || "nvidia/nemotron-3-nano-30b-a3b",
+        baseUrl: settings.nim_base_url || "https://integrate.api.nvidia.com/v1",
+      };
+    }
+  }
   const apiKey = Deno.env.get("NVIDIA_NIM_API_KEY");
-  if (!apiKey) throw new Error("NVIDIA_NIM_API_KEY not configured");
+  if (!apiKey) throw new Error("NVIDIA NIM API key not configured. Add it in Account settings or as an edge function secret.");
   return {
     apiKey,
     model: Deno.env.get("NVIDIA_NIM_MODEL") || "nvidia/nemotron-3-nano-30b-a3b",
@@ -104,7 +118,7 @@ Deno.serve(async (req: Request) => {
 
       let reply = "";
       try {
-        const config = await getNimConfig();
+        const config = await getNimConfig(user_id);
         const systemPrompt = `You are a professional scope-creep defender for freelancers and agencies. The user will paste a client email asking for extra work. Write a professional, firm but friendly reply that references the contract's actual revision limits and scope terms. Do NOT be aggressive — be collaborative but clear about boundaries. Sign as "Alex". Return only the email body, no JSON.`;
         reply = await callNim(
           `Contract: ${contract?.title || "the contract"}\nContract terms:\n${termSummary}\n\nClient's email:\n${client_email}\n\nWrite a professional reply that pushes back on scope creep while referencing the contract terms.`,
@@ -180,7 +194,7 @@ Deno.serve(async (req: Request) => {
     let emailBody = "";
 
     try {
-      const config = await getNimConfig();
+      const config = await getNimConfig(user_id || invoice.user_id);
       const toneDescriptions: Record<Tone, string> = {
         friendly: "warm, low-pressure, like a friend",
         professional: "polite but clear about obligations",

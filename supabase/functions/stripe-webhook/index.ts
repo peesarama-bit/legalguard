@@ -9,8 +9,21 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const stripeWebhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
 const supabase = createClient(supabaseUrl, serviceKey);
+
+async function getStripeSecret(userId?: string): Promise<string> {
+  if (userId) {
+    const { data: settings } = await supabase
+      .from("workspace_settings")
+      .select("stripe_webhook_secret")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (settings?.stripe_webhook_secret) return settings.stripe_webhook_secret;
+  }
+  const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+  if (!secret) throw new Error("Stripe webhook secret not configured. Add it in Account settings or as an edge function secret.");
+  return secret;
+}
 
 async function verifyStripeSignature(payload: string, signature: string, secret: string): Promise<boolean> {
   const parts = signature.split(",");
