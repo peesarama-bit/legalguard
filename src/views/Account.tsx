@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { User, Building2, Mail, Save, Loader2, Check, LogOut, Scale, Calendar } from 'lucide-react';
+import { User, Building2, Mail, Save, Loader as Loader2, Check, LogOut, Scale, Calendar, Key, Cpu, Webhook, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { dateLabel } from '@/lib/format';
+import { fetchWorkspaceSettings, upsertWorkspaceSettings } from '@/lib/dataAccess';
 
 export default function Account() {
   const { user, profile, updateProfile, signOut } = useAuth();
@@ -11,12 +12,38 @@ export default function Account() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Workspace settings state
+  const [nimKey, setNimKey] = useState('');
+  const [nimModel, setNimModel] = useState('nvidia/nemotron-3-nano-30b-a3b');
+  const [nimBaseUrl, setNimBaseUrl] = useState('https://integrate.api.nvidia.com/v1');
+  const [stripeSecret, setStripeSecret] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [showStripeSecret, setShowStripeSecret] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.display_name || '');
       setCompany(profile.company || '');
     }
   }, [profile]);
+
+  useEffect(() => {
+    fetchWorkspaceSettings()
+      .then((s) => {
+        if (s) {
+          setNimKey(s.nim_api_key || '');
+          setNimModel(s.nim_model || 'nvidia/nemotron-3-nano-30b-a3b');
+          setNimBaseUrl(s.nim_base_url || 'https://integrate.api.nvidia.com/v1');
+          setStripeSecret(s.stripe_webhook_secret || '');
+        }
+      })
+      .catch(() => {})
+      .finally(() => setSettingsLoading(false));
+  }, []);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -33,6 +60,26 @@ export default function Account() {
     setSaving(false);
   }
 
+  async function handleSaveSettings(e: React.FormEvent) {
+    e.preventDefault();
+    setSettingsSaving(true);
+    setSettingsError(null);
+    setSettingsSaved(false);
+    try {
+      await upsertWorkspaceSettings({
+        nim_api_key: nimKey,
+        nim_model: nimModel,
+        nim_base_url: nimBaseUrl,
+        stripe_webhook_secret: stripeSecret,
+      });
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 2500);
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : 'Failed to save settings');
+    }
+    setSettingsSaving(false);
+  }
+
   if (!user) return null;
 
   const initials = (displayName || user.email || '?')
@@ -45,7 +92,7 @@ export default function Account() {
     <div className="animate-fade-in space-y-6">
       <div>
         <h1 className="font-serif text-2xl font-semibold text-ink-900 sm:text-3xl">Account</h1>
-        <p className="mt-1.5 text-sm text-ink-500">Manage your profile and session.</p>
+        <p className="mt-1.5 text-sm text-ink-500">Manage your profile, integrations, and session.</p>
       </div>
 
       {/* Profile card */}
@@ -106,6 +153,130 @@ export default function Account() {
             </div>
           </form>
         </div>
+      </div>
+
+      {/* AI & Integrations Settings */}
+      <div className="rounded-2xl border border-ink-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-2">
+          <Cpu className="h-5 w-5 text-primary-600" />
+          <h2 className="font-serif text-lg font-semibold">AI & Integrations</h2>
+        </div>
+        <p className="mt-1 text-sm text-ink-500">
+          Configure your NVIDIA NIM API key to power contract scanning, email drafting, and client analysis.
+          If left blank, the system uses the default server-side key.
+        </p>
+
+        {settingsLoading ? (
+          <div className="mt-6 flex items-center gap-2 text-sm text-ink-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading settings…
+          </div>
+        ) : (
+          <form onSubmit={handleSaveSettings} className="mt-6 space-y-5">
+            {/* NVIDIA NIM API Key */}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-500">
+                NVIDIA NIM API Key
+              </label>
+              <div className="relative">
+                <Key className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={nimKey}
+                  onChange={(e) => setNimKey(e.target.value)}
+                  placeholder="nvapi-…"
+                  className="w-full rounded-xl border border-ink-200 bg-ink-50/50 py-2.5 pl-10 pr-10 text-sm text-ink-900 outline-none transition focus:border-primary-300 focus:bg-white focus:ring-2 focus:ring-primary-100"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600"
+                >
+                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-ink-400">
+                Get a key from{' '}
+                <a href="https://build.nvidia.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">
+                  build.nvidia.com
+                </a>
+              </p>
+            </div>
+
+            {/* Model */}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-500">
+                Model
+              </label>
+              <div className="relative">
+                <Cpu className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                <input
+                  type="text"
+                  value={nimModel}
+                  onChange={(e) => setNimModel(e.target.value)}
+                  className="w-full rounded-xl border border-ink-200 bg-ink-50/50 py-2.5 pl-10 pr-3 text-sm text-ink-900 outline-none transition focus:border-primary-300 focus:bg-white focus:ring-2 focus:ring-primary-100"
+                />
+              </div>
+              <p className="mt-1 text-xs text-ink-400">Default: nvidia/nemotron-3-nano-30b-a3b</p>
+            </div>
+
+            {/* Base URL */}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-500">
+                API Base URL
+              </label>
+              <input
+                type="text"
+                value={nimBaseUrl}
+                onChange={(e) => setNimBaseUrl(e.target.value)}
+                className="w-full rounded-xl border border-ink-200 bg-ink-50/50 py-2.5 px-3 text-sm text-ink-900 outline-none transition focus:border-primary-300 focus:bg-white focus:ring-2 focus:ring-primary-100"
+              />
+              <p className="mt-1 text-xs text-ink-400">Default: https://integrate.api.nvidia.com/v1</p>
+            </div>
+
+            <div className="border-t border-ink-100 pt-5" />
+
+            {/* Stripe Webhook Secret */}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-500">
+                Stripe Webhook Secret
+              </label>
+              <div className="relative">
+                <Webhook className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                <input
+                  type={showStripeSecret ? 'text' : 'password'}
+                  value={stripeSecret}
+                  onChange={(e) => setStripeSecret(e.target.value)}
+                  placeholder="whsec_…"
+                  className="w-full rounded-xl border border-ink-200 bg-ink-50/50 py-2.5 pl-10 pr-10 text-sm text-ink-900 outline-none transition focus:border-primary-300 focus:bg-white focus:ring-2 focus:ring-primary-100"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowStripeSecret(!showStripeSecret)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600"
+                >
+                  {showStripeSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-ink-400">Used to verify incoming Stripe webhook events.</p>
+            </div>
+
+            {settingsError && (
+              <div className="rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-2.5 text-sm text-danger-700">
+                {settingsError}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <button
+                type="submit" disabled={settingsSaving}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:bg-primary-300"
+              >
+                {settingsSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : settingsSaved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+                {settingsSaving ? 'Saving…' : settingsSaved ? 'Saved' : 'Save settings'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
       {/* Account info */}

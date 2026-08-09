@@ -72,16 +72,17 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const isValid = await verifyStripeSignature(rawBody, stripeSignature, stripeWebhookSecret);
+    const event = JSON.parse(rawBody);
+    const eventType = event.type;
+    const userId = event.data?.object?.metadata?.user_id;
+    const secret = await getStripeSecret(userId);
+    const isValid = await verifyStripeSignature(rawBody, stripeSignature, secret);
     if (!isValid) {
       return new Response(JSON.stringify({ error: "Invalid signature" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const event = JSON.parse(rawBody);
-    const eventType = event.type;
 
     if (eventType === "invoice.payment_overdue" || eventType === "invoice.payment_failed" || eventType === "charge.dispute.created") {
       const invoiceNumber = event.data?.object?.number;

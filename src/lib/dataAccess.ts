@@ -12,6 +12,7 @@ import type {
   PaymentPromiseRow,
   AiInsightRow,
   ContractWithDetails,
+  WorkspaceSettingsRow,
 } from './supabase';
 
 // ---------- Contracts ----------
@@ -213,6 +214,32 @@ export async function fetchAiInsights(clientName?: string): Promise<AiInsightRow
   const { data, error } = await query;
   if (error) throw error;
   return data ?? [];
+}
+
+// ---------- Workspace Settings ----------
+
+export async function fetchWorkspaceSettings(): Promise<WorkspaceSettingsRow | null> {
+  const { data, error } = await supabase
+    .from('workspace_settings')
+    .select('*')
+    .maybeSingle();
+  if (error) throw error;
+  return data as WorkspaceSettingsRow | null;
+}
+
+export async function upsertWorkspaceSettings(settings: {
+  nim_api_key?: string;
+  nim_model?: string;
+  nim_base_url?: string;
+  stripe_webhook_secret?: string;
+}): Promise<WorkspaceSettingsRow> {
+  const { data, error } = await supabase
+    .from('workspace_settings')
+    .upsert(settings, { onConflict: 'user_id' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as WorkspaceSettingsRow;
 }
 
 // ---------- Realtime subscriptions ----------

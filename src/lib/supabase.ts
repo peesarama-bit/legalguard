@@ -160,6 +160,17 @@ export type AiInsightRow = {
   user_id: string | null;
 };
 
+export type WorkspaceSettingsRow = {
+  id: string;
+  nim_api_key: string;
+  nim_model: string;
+  nim_base_url: string;
+  stripe_webhook_secret: string;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+};
+
 // ---- Composite types for the UI ----
 
 export type ContractWithDetails = ContractRow & {
