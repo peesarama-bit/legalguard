@@ -13,11 +13,12 @@ const supabase = createClient(supabaseUrl, serviceKey);
 
 async function getNimConfig(userId?: string): Promise<{ apiKey: string; model: string; baseUrl: string }> {
   if (userId) {
-    const { data: settings } = await supabase
+    const { data: settings, error: cfgErr } = await supabase
       .from("workspace_settings")
       .select("nim_api_key, nim_model, nim_base_url")
       .eq("user_id", userId)
       .maybeSingle();
+    if (cfgErr) console.error("[AI-CHAT] settings query error:", cfgErr.message);
     if (settings?.nim_api_key) {
       return {
         apiKey: settings.nim_api_key,
@@ -84,6 +85,13 @@ Deno.serve(async (req: Request) => {
       supabase.from("clients").select("name, risk_level, total_outstanding, total_overdue, relationship_health").eq("user_id", user_id),
     ]);
 
+    if (contractsRes.error) console.error("[AI-CHAT] contracts query error:", contractsRes.error.message);
+    if (invoicesRes.error) console.error("[AI-CHAT] invoices query error:", invoicesRes.error.message);
+    if (promisesRes.error) console.error("[AI-CHAT] promises query error:", promisesRes.error.message);
+    if (commsRes.error) console.error("[AI-CHAT] comms query error:", commsRes.error.message);
+    if (insightsRes.error) console.error("[AI-CHAT] insights query error:", insightsRes.error.message);
+    if (clientsRes.error) console.error("[AI-CHAT] clients query error:", clientsRes.error.message);
+
     const contracts = contractsRes.data ?? [];
     const invoices = invoicesRes.data ?? [];
     const promises = promisesRes.data ?? [];
@@ -124,6 +132,7 @@ MISSED PROMISES: ${missedPromises.length}
 PENDING PROMISES: ${pendingPromises.length}`;
 
     let answer = "";
+    let usedFallback = false;
 
     try {
       const config = await getNimConfig(user_id);
@@ -133,7 +142,9 @@ PENDING PROMISES: ${pendingPromises.length}`;
         systemPrompt,
         config
       );
-    } catch {
+    } catch (llmErr) {
+      console.error("[AI-CHAT] LLM error:", (llmErr as Error).message);
+      usedFallback = true;
       // Fallback: simple data-based answer
       if (question.toLowerCase().includes("why") && question.toLowerCase().includes("paid")) {
         const clientMatch = clients.find((c: any) => question.toLowerCase().includes(c.name.toLowerCase().split(" ")[0]));
@@ -170,16 +181,19 @@ PENDING PROMISES: ${pendingPromises.length}`;
     }
 
     // Log the chat
-    await supabase.from("activity_log").insert({
+    const { error: logErr } = await supabase.from("activity_log").insert({
       event_type: "ai_chat",
       description: `User asked: "${question.slice(0, 80)}"`,
       severity: "info",
       user_id,
     });
+    if (logErr) console.error("[AI-CHAT] activity log error:", logErr.message);
 
+    const isFallback = usedFallback;
     return new Response(JSON.stringify({
       success: true,
       answer,
+      fallback: isFallback,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

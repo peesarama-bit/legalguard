@@ -1,18 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  FileSearch,
-  Upload,
-  FileText,
-  AlertTriangle,
-  ShieldCheck,
-  Loader2,
-  Sparkles,
-  TrendingUp,
-  ArrowRight,
-  Lightbulb,
-  Scale,
-  CheckCircle2,
-} from 'lucide-react';
+import { FileSearch, Upload, FileText, TriangleAlert as AlertTriangle, ShieldCheck, Loader as Loader2, Sparkles, TrendingUp, ArrowRight, Lightbulb, Scale, CircleCheck as CheckCircle2 } from 'lucide-react';
 import type { ContractWithDetails, ClauseFlagRow } from '@/lib/supabase';
 import { fetchAllContractDetails, createContract } from '@/lib/dataAccess';
 import { scanContract } from '@/lib/api';

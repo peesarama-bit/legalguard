@@ -15,11 +15,12 @@ type Tone = "friendly" | "professional" | "firm" | "final";
 
 async function getNimConfig(userId?: string): Promise<{ apiKey: string; model: string; baseUrl: string }> {
   if (userId) {
-    const { data: settings } = await supabase
+    const { data: settings, error: cfgErr } = await supabase
       .from("workspace_settings")
       .select("nim_api_key, nim_model, nim_base_url")
       .eq("user_id", userId)
       .maybeSingle();
+    if (cfgErr) console.error("[AI-EMAIL] settings query error:", cfgErr.message);
     if (settings?.nim_api_key) {
       return {
         apiKey: settings.nim_api_key,
@@ -107,16 +108,19 @@ Deno.serve(async (req: Request) => {
         .from("contracts").select("title, raw_text").eq("id", contract_id).maybeSingle();
       if (cErr) throw cErr;
 
-      const { data: terms } = await supabase
+      const { data: terms, error: tErr } = await supabase
         .from("contract_terms").select("*").eq("contract_id", contract_id);
-      const { data: flags } = await supabase
+      if (tErr) console.error("[AI-EMAIL] terms query error:", tErr.message);
+      const { data: flags, error: fErr } = await supabase
         .from("clause_flags").select("*").eq("contract_id", contract_id);
+      if (fErr) console.error("[AI-EMAIL] flags query error:", fErr.message);
 
       const revisionTerm = (terms ?? []).find((t: { label: string }) => t.label === "Revision rounds");
       const contractText = contract?.raw_text || "";
       const termSummary = (terms ?? []).map((t: { label: string; value: string }) => `${t.label}: ${t.value}`).join("\n");
 
       let reply = "";
+      let scopeFallback = false;
       try {
         const config = await getNimConfig(user_id);
         const systemPrompt = `You are a professional scope-creep defender for freelancers and agencies. The user will paste a client email asking for extra work. Write a professional, firm but friendly reply that references the contract's actual revision limits and scope terms. Do NOT be aggressive — be collaborative but clear about boundaries. Sign as "Alex". Return only the email body, no JSON.`;
@@ -125,18 +129,21 @@ Deno.serve(async (req: Request) => {
           systemPrompt,
           config
         );
-      } catch {
+      } catch (llmErr) {
+        console.error("[AI-EMAIL] scope LLM error:", (llmErr as Error).message);
+        scopeFallback = true;
         reply = fallbackScopeReply(contract?.title ?? "contract", revisionTerm?.value ?? "2 rounds per deliverable");
       }
 
-      await supabase.from("activity_log").insert({
+      const { error: logErr } = await supabase.from("activity_log").insert({
         event_type: "scope_defended",
         description: `Scope creep defender generated a reply referencing ${contract?.title ?? "contract"}`,
         severity: "info",
         user_id,
       });
+      if (logErr) console.error("[AI-EMAIL] activity log error:", logErr.message);
 
-      return new Response(JSON.stringify({ reply }), {
+      return new Response(JSON.stringify({ success: true, reply, fallback: scopeFallback }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -192,6 +199,7 @@ Deno.serve(async (req: Request) => {
 
     let subject = "";
     let emailBody = "";
+    let draftFallback = false;
 
     try {
       const config = await getNimConfig(user_id || invoice.user_id);
@@ -210,7 +218,7 @@ Days late: ${invoice.days_late}
 Contract: ${contractTitle}
 Contract terms:
 ${terms.map(t => `• ${t.label}: ${t.value}`).join("\n")}
-${communications.length > 0 ? `\nRecent client communications:\n${communications.map(c => `• [${c.direction}] ${c.subject}: ${c.body.slice(0, 200)}`).join("\n")}` : ""}
+${communications.length > 0 ? `\nRecent client communications:\n${communications.map(c => `• [${c.direction}] ${c.subject}: ${c.body.slice(0, 2000)}`).join("\n")}` : ""}
 ${promises && promises.length > 0 ? `\nPayment promises:\n${promises.map((p: any) => `• Promised ${p.promised_amount ? '$' + p.promised_amount : 'payment'} on ${p.promised_date} (status: ${p.status})`).join("\n")}` : ""}`;
 
       const raw = await callNim(
@@ -228,7 +236,9 @@ ${promises && promises.length > 0 ? `\nPayment promises:\n${promises.map((p: any
         subject = `Re: Invoice ${invoice.number} — payment ${invoice.days_late} days overdue`;
         emailBody = raw.trim();
       }
-    } catch {
+    } catch (llmErr) {
+      console.error("[AI-EMAIL] draft LLM error:", (llmErr as Error).message);
+      draftFallback = true;
       const fb = fallbackEmail(invoice.number, invoice.client, Number(invoice.amount), invoice.due_at, invoice.days_late, tone || "professional", terms, contractTitle);
       subject = fb.subject;
       emailBody = fb.body;
@@ -250,19 +260,21 @@ ${promises && promises.length > 0 ? `\nPayment promises:\n${promises.map((p: any
       .single();
     if (draftErr) throw draftErr;
 
-    await supabase.from("activity_log").insert({
+    const { error: logErr } = await supabase.from("activity_log").insert({
       event_type: "email_drafted",
       description: `AI drafted a ${tone || "professional"} follow-up email for ${invoice.number}`,
       severity: "info",
       meta: { invoice_id, draft_id: draftRow.id },
       user_id: user_id || invoice.user_id,
     });
+    if (logErr) console.error("[AI-EMAIL] activity log error:", logErr.message);
 
     return new Response(JSON.stringify({
       success: true,
       draft_id: draftRow.id,
       subject,
       body: emailBody,
+      fallback: draftFallback,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
