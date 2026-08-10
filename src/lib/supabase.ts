@@ -21,6 +21,25 @@ export type ContractRow = {
   uploaded_at: string;
   created_at: string;
   user_id: string | null;
+  file_size: number;
+  mime_type: string;
+  extraction_status: string;
+  analysis_status: string;
+  contract_type: string;
+  currency: string;
+  analyzed_at: string | null;
+  extraction_method: string;
+  native_text_pages: number;
+  ocr_pages: number;
+  total_extracted_chars: number;
+  total_words: number;
+  chunk_count: number;
+  extraction_duration_ms: number;
+  ocr_duration_ms: number;
+  ai_duration_ms: number;
+  failed_pages: string;
+  extraction_confidence: number;
+  processing_error: string;
 };
 
 export type ClauseFlagRow = {
@@ -34,6 +53,9 @@ export type ClauseFlagRow = {
   clause_ref: string | null;
   created_at: string;
   user_id: string | null;
+  source_page: number | null;
+  category: string;
+  confidence: number;
 };
 
 export type ContractTermRow = {
@@ -45,6 +67,9 @@ export type ContractTermRow = {
   source: string | null;
   created_at: string;
   user_id: string | null;
+  source_page: number | null;
+  confidence: number;
+  status: string;
 };
 
 export type InvoiceRow = {

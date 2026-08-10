@@ -41,9 +41,25 @@ async function getCurrentUserId(): Promise<string | null> {
 
 export type ScanResult = {
   success: boolean;
-  flags: { level: string; title: string; excerpt: string; plain_english: string; pushback: string; clause_ref: string }[];
-  terms: { label: string; value: string; category: string; source: string }[];
+  flags: { level: string; title: string; excerpt: string; plain_english: string; pushback: string; clause_ref: string; source_page: number | null; category: string; confidence: number }[];
+  terms: { label: string; value: string; category: string; source: string; source_page: number | null; confidence: number; status: string }[];
   riskScore: number;
+  contractValue: number;
+  currency: string;
+  contractType: string;
+  diagnostics?: {
+    pageCount: number;
+    nativeTextPages: number;
+    ocrPages: number;
+    failedPages: number[];
+    totalChars: number;
+    totalWords: number;
+    chunkCount: number;
+    extractionDurationMs: number;
+    ocrDurationMs: number;
+    aiDurationMs: number;
+    overallConfidence: number;
+  };
 };
 
 export type WebhookResult = {
@@ -90,11 +106,16 @@ export type ChatResult = {
   answer: string;
 };
 
-export async function scanContract(contractId: string, rawText: string): Promise<ScanResult> {
+export async function scanContract(
+  contractId: string,
+  chunks: { chunkId: number; pageStart: number; pageEnd: number; text: string }[],
+  pageCount: number,
+): Promise<ScanResult> {
   const userId = await getCurrentUserId();
   return callEdgeFunction<ScanResult>("ai-contract-scan", {
     contract_id: contractId,
-    raw_text: rawText,
+    chunks,
+    page_count: pageCount,
     user_id: userId,
   });
 }
