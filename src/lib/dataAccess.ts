@@ -74,120 +74,14 @@ export async function fetchAllContractDetails(): Promise<ContractWithDetails[]> 
   }));
 }
 
-export async function createContract(
-  title: string,
-  client: string,
-  rawText: string,
-  pageCount: number = 1,
-  fileSize: number = 0,
-  mimeType: string = '',
-): Promise<ContractRow> {
+export async function createContract(title: string, client: string, rawText: string): Promise<ContractRow> {
   const { data, error } = await supabase
     .from('contracts')
-    .insert({
-      title,
-      client,
-      page_count: pageCount,
-      status: 'processing',
-      risk_score: 0,
-      total_value: 0,
-      raw_text: rawText,
-      file_size: fileSize,
-      mime_type: mimeType,
-      extraction_status: 'pending',
-      analysis_status: 'pending',
-    })
+    .insert({ title, client, page_count: 1, status: 'processing', risk_score: 0, total_value: 0, raw_text: rawText })
     .select()
     .single();
   if (error) throw error;
   return data as ContractRow;
-}
-
-export async function updateContractExtraction(
-  contractId: string,
-  extractionData: {
-    page_count: number;
-    raw_text: string;
-    extraction_status: string;
-    extraction_method: string;
-    native_text_pages: number;
-    ocr_pages: number;
-    total_extracted_chars: number;
-    total_words: number;
-    chunk_count: number;
-    extraction_duration_ms: number;
-    ocr_duration_ms: number;
-    extraction_confidence: number;
-    failed_pages: string;
-  },
-): Promise<void> {
-  const { error } = await supabase
-    .from('contracts')
-    .update(extractionData)
-    .eq('id', contractId);
-  if (error) throw error;
-}
-
-export async function insertContractPages(
-  contractId: string,
-  pages: { page_number: number; text: string; extraction_method: string; ocr_confidence: number; char_count: number; word_count: number }[],
-): Promise<void> {
-  if (pages.length === 0) return;
-  const rows = pages.map((p) => ({ ...p, contract_id: contractId }));
-  const { error } = await supabase.from('contract_pages').insert(rows);
-  if (error) throw error;
-}
-
-export async function deleteContractPages(contractId: string): Promise<void> {
-  const { error } = await supabase.from('contract_pages').delete().eq('contract_id', contractId);
-  if (error) throw error;
-}
-
-export async function fetchContractPages(contractId: string): Promise<any[]> {
-  const { data, error } = await supabase
-    .from('contract_pages')
-    .select('*')
-    .eq('contract_id', contractId)
-    .order('page_number');
-  if (error) throw error;
-  return data ?? [];
-}
-
-export async function insertAnalysisRun(
-  contractId: string,
-  stage: string,
-  status: string = 'running',
-  error: string = '',
-): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('analysis_runs')
-    .insert({ contract_id: contractId, stage, status, error })
-    .select('id')
-    .single();
-  if (error) throw error;
-  return data?.id ?? null;
-}
-
-export async function updateAnalysisRun(
-  runId: string,
-  status: string,
-  error: string = '',
-): Promise<void> {
-  const { error: err } = await supabase
-    .from('analysis_runs')
-    .update({ status, error, completed_at: new Date().toISOString() })
-    .eq('id', runId);
-  if (err) throw err;
-}
-
-export async function fetchAnalysisRuns(contractId: string): Promise<any[]> {
-  const { data, error } = await supabase
-    .from('analysis_runs')
-    .select('*')
-    .eq('contract_id', contractId)
-    .order('started_at');
-  if (error) throw error;
-  return data ?? [];
 }
 
 // ---------- Invoices ----------
